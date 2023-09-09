@@ -15,9 +15,11 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
         const gameId = bet.gameId;
 
         if (bet.status !== "completed") {
-          const games = await axios.get(
+          const res = await axios.get(
             `${API_SCORES_URL}/?apiKey=${ODDS_API_KEY}&eventIds=${gameId}&daysFrom=3`
           );
+
+          const games = res.data;
 
           if (games) {
             const game = games[0];
@@ -27,10 +29,10 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
               const homeScore = parseInt(game.scores[0].score) + bet.spread;
               const awayScore = parseInt(game.scores[1].score) + bet.spread;
 
-              if (bet.type === "spread") {
-                let isTie = false;
-                let winner = "";
+              let isTie = false;
+              let winner = "";
 
+              if (bet.type === "Spread") {
                 if (homeScore > awayScore) {
                   winner = game.home_team;
                 } else if (homeScore < awayScore) {
@@ -46,19 +48,26 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
                   totalPoints += 0.5;
                 }
               }
+
               if (bet.type === "totals") {
                 const totalGameScore = homeScore + awayScore;
 
-                if (totalGameScore === bet.totals) {
+                if (bet.totals === "Over" && bet.point > totalGameScore) {
+                  winner = bet.team;
+                  totalPoints += 1;
+                }
+
+                if (bet.totals === "Under" && bet.point > totalGameScore) {
+                  winner = bet.team;
                   totalPoints += 1;
                 }
               }
-            }
 
-            _bets[i] = {
-              ...bet,
-              status: "completed",
-            };
+              _bets[i] = {
+                ...bet,
+                status: winner === bet.team ? "win" : "lost",
+              };
+            }
           }
         }
       })
@@ -73,8 +82,8 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
 
 // Function to be scheduled
 exports.checkBetsScheduled = functions.pubsub
-  .schedule("every 1 minute")
-  .timeZone("America/New_York")
+  .schedule("*/30 * * * 6")
+  .timeZone("America/Chicago")
   .onRun(async (context) => {
     try {
       // Query the "bets" collection for documents added in the last 30 minutes
@@ -115,36 +124,23 @@ exports.checkBetsScheduled = functions.pubsub
             currentUserData.points ? currentUserData.points : 0
           );
 
-          if (totalPoints > 0) {
-            // assign points
-            await admin
-              .firestore()
-              .collection("users")
-              .doc(userId)
-              .update({
-                points: admin.firestore.FieldValue.increment(totalPoints),
-              });
+          console.log("TOTAL_POINTS", totalPoints);
 
-            await admin
-              .firestore()
-              .collection("bets")
-              .doc(userId)
-              .update({
-                ...bets,
-                [lastWeek]: [...updatedBets],
-              });
-          }
-        })
-      );
-
-      await Promise.all(
-        bets.map(async (bet) => {
+          // assign points
           await admin
             .firestore()
             .collection("users")
-            .doc(bet.userId)
+            .doc(userId)
             .update({
-              points: admin.firestore.FieldValue.increment(1),
+              points: admin.firestore.FieldValue.increment(+totalPoints),
+            });
+
+          await admin
+            .firestore()
+            .collection("bets")
+            .doc(userId)
+            .update({
+              [lastWeek]: [...updatedBets],
             });
         })
       );
@@ -153,3 +149,4 @@ exports.checkBetsScheduled = functions.pubsub
     }
     return null; // Return null to indicate the function completed successfully
   });
+``;
