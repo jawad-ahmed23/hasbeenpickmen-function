@@ -14,7 +14,7 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
       bets.map(async (bet, i) => {
         const gameId = bet.gameId;
 
-        if (bet.status !== "completed") {
+        if (bet.status === "in-progress") {
           const res = await axios.get(
             `${API_SCORES_URL}/?apiKey=${ODDS_API_KEY}&eventIds=${gameId}&daysFrom=3`
           );
@@ -28,6 +28,8 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
             if (game && game?.completed) {
               const homeScore = parseInt(game.scores[0].score) + bet.spread;
               const awayScore = parseInt(game.scores[1].score) + bet.spread;
+              const totalGameScore =
+                parseInt(game.scores[0].score) + parseInt(game.scores[1].score);
 
               let isTie = false;
               let winner = "";
@@ -50,14 +52,12 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
               }
 
               if (bet.type === "totals") {
-                const totalGameScore = homeScore + awayScore;
-
-                if (bet.totals === "Over" && bet.point > totalGameScore) {
+                if (bet.totals === "Over" && totalGameScore > +bet.point) {
                   winner = bet.team;
                   totalPoints += 1;
                 }
 
-                if (bet.totals === "Under" && bet.point > totalGameScore) {
+                if (bet.totals === "Under" && totalGameScore < +bet.point) {
                   winner = bet.team;
                   totalPoints += 1;
                 }
@@ -66,6 +66,7 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
               _bets[i] = {
                 ...bet,
                 status: winner === bet.team ? "win" : "lost",
+                gainedPoints: totalGameScore,
               };
             }
           }
@@ -123,8 +124,6 @@ exports.checkBetsScheduled = functions.pubsub
             userId,
             currentUserData.points ? currentUserData.points : 0
           );
-
-          console.log("TOTAL_POINTS", totalPoints);
 
           // assign points
           await admin
