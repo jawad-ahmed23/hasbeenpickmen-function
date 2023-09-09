@@ -29,9 +29,9 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
               let homeScore = parseInt(game.scores[0].score);
               let awayScore = parseInt(game.scores[1].score);
 
-              if (game.score[0].name === bet.team) {
+              if (game.scores[0].name === bet.team) {
                 homeScore += bet.spread;
-              } else if (game.score[1].name === bet.team) {
+              } else if (game.scores[1].name === bet.team) {
                 awayScore += bet.spread;
               }
 
@@ -83,7 +83,7 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
 
     return { totalPoints, bets: _bets };
   } catch (error) {
-    console.log(error);
+    console.log("BETS_CHECK_ERROR", error);
     return {};
   }
 };
