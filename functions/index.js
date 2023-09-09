@@ -26,8 +26,15 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
 
             // games is completed!
             if (game && game?.completed) {
-              const homeScore = parseInt(game.scores[0].score) + bet.spread;
-              const awayScore = parseInt(game.scores[1].score) + bet.spread;
+              let homeScore = parseInt(game.scores[0].score);
+              let awayScore = parseInt(game.scores[1].score);
+
+              if (game.score[0].name === bet.team) {
+                homeScore += bet.spread;
+              } else if (game.score[1].name === bet.team) {
+                awayScore += bet.spread;
+              }
+
               const totalGameScore =
                 parseInt(game.scores[0].score) + parseInt(game.scores[1].score);
 
@@ -83,7 +90,7 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
 
 // Function to be scheduled
 exports.checkBetsScheduled = functions.pubsub
-  .schedule("*/30 * * * 6")
+  .schedule("*/30 * * * 6,0")
   .timeZone("America/Chicago")
   .onRun(async (context) => {
     try {
@@ -113,8 +120,9 @@ exports.checkBetsScheduled = functions.pubsub
 
           const currentUserData = currentUser.data();
 
-          const weeks = Object.keys(bet.bets);
+          const weeks = Object.keys(bet.bets).sort();
 
+          // latest week bets
           const lastWeek = weeks[weeks.length - 1];
 
           const currentWeekBets = bet.bets[lastWeek];
