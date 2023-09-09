@@ -1,6 +1,6 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const axios = require("axios");
+const axios = require("axios").default;
 const { API_SCORES_URL, ODDS_API_KEY } = require("./constants");
 
 admin.initializeApp();
