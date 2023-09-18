@@ -81,7 +81,12 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
       })
     );
 
-    return { totalPoints, bets: _bets };
+    const isAllWin = _bets.every((bet) => bet.status === "win");
+
+    return {
+      totalPoints: isAllWin ? totalPoints + 1 : totalPoints,
+      bets: _bets,
+    };
   } catch (error) {
     console.log("BETS_CHECK_ERROR", error);
     return {};
@@ -123,32 +128,38 @@ exports.checkBetsScheduled = functions.pubsub
           const weeks = Object.keys(bet.bets).sort();
 
           // latest week bets
-          const lastWeek = weeks[weeks.length - 1];
+          const currentWeek = weeks[weeks.length - 1];
 
-          const currentWeekBets = bet.bets[lastWeek];
+          const currentWeekBets = bet.bets[currentWeek];
 
-          const { totalPoints, bets: updatedBets } = await betsToCheck(
-            currentWeekBets,
-            userId,
-            currentUserData.points ? currentUserData.points : 0
+          const isUncheckedBets = currentWeekBets.some(
+            (bet) => bet.status === "in-progress"
           );
 
-          // assign points
-          await admin
-            .firestore()
-            .collection("users")
-            .doc(userId)
-            .update({
-              points: admin.firestore.FieldValue.increment(+totalPoints),
-            });
+          if (isUncheckedBets) {
+            const { totalPoints, bets: updatedBets } = await betsToCheck(
+              currentWeekBets,
+              userId,
+              currentUserData.points ? currentUserData.points : 0
+            );
 
-          await admin
-            .firestore()
-            .collection("bets")
-            .doc(userId)
-            .update({
-              [lastWeek]: [...updatedBets],
-            });
+            // assign points
+            await admin
+              .firestore()
+              .collection("users")
+              .doc(userId)
+              .update({
+                points: admin.firestore.FieldValue.increment(totalPoints),
+              });
+
+            await admin
+              .firestore()
+              .collection("bets")
+              .doc(userId)
+              .update({
+                [currentWeek]: [...updatedBets],
+              });
+          }
         })
       );
     } catch (error) {
@@ -156,4 +167,3 @@ exports.checkBetsScheduled = functions.pubsub
     }
     return null; // Return null to indicate the function completed successfully
   });
-``;
