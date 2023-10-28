@@ -130,12 +130,18 @@ exports.checkBetsScheduled = functions.pubsub
 
           const currentUserData = currentUser.data();
 
-          const weeks = Object.keys(bet.bets).sort();
+          // const weeks = Object.keys(bet.bets).sort();
 
-          // latest week bets
-          const currentWeek = weeks[weeks.length - 1];
+          let betsWeeksNo = Object.keys(bet.bets).map(
+            (w) => +w.replace("week-", "")
+          );
 
-          const currentWeekBets = bet.bets[currentWeek];
+          betsWeeksNo = betsWeeksNo.sort((a, b) => a - b);
+
+          // // latest week bets
+          const currentWeek = betsWeeksNo[betsWeeksNo.length - 1];
+
+          const currentWeekBets = bet.bets["week-" + String(currentWeek)];
 
           const isUncheckedBets = currentWeekBets.some(
             (bet) => bet.status === "in-progress"
