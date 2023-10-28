@@ -54,7 +54,7 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
                   totalPoints += 1;
                 }
                 if (isTie) {
-                  totalPoints += 0.5;
+                  totalPoints += 0;
                 }
               }
 
@@ -67,6 +67,11 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
                 if (bet.totals === "Under" && totalGameScore < +bet.point) {
                   winner = bet.team;
                   totalPoints += 1;
+                }
+
+                if (bet.total === totalGameScore) {
+                  winner = bet.team;
+                  totalPoints += 0;
                 }
               }
 
