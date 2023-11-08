@@ -5,7 +5,10 @@ const { API_SCORES_URL, ODDS_API_KEY } = require("./constants");
 
 admin.initializeApp();
 
-const betsToCheck = async (bets, userId, userCurrentPoints) => {
+const MAX_RETRY_ATTEMPTS = 5;
+const BASE_BACKOFF_DELAY = 1000;
+
+const betsToCheck = async (bets) => {
   try {
     let totalPoints = 0;
     let _bets = [...bets];
@@ -15,73 +18,161 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
         const gameId = bet.gameId;
 
         if (bet.status === "in-progress") {
-          const res = await axios.get(
-            `${API_SCORES_URL}/?apiKey=${ODDS_API_KEY}&eventIds=${gameId}&daysFrom=3`
-          );
+          let retryAttempts = 0;
+          let backoffDelay = BASE_BACKOFF_DELAY;
 
-          const games = res.data;
+          while (retryAttempts < MAX_RETRY_ATTEMPTS) {
+            try {
+              await new Promise((resolve) => setTimeout(resolve, backoffDelay));
 
-          if (games) {
-            const game = games[0];
+              const res = await axios.get(
+                `${API_SCORES_URL}/?apiKey=${ODDS_API_KEY}&eventIds=${gameId}&daysFrom=3`
+              );
 
-            // games is completed!
-            if (game && game?.completed) {
-              let homeScore = parseInt(game.scores[0].score);
-              let awayScore = parseInt(game.scores[1].score);
+              const games = res.data;
 
-              if (game.scores[0].name === bet.team) {
-                homeScore += bet.spread;
-              } else if (game.scores[1].name === bet.team) {
-                awayScore += bet.spread;
+              if (games) {
+                const game = games[0];
+
+                // games is completed!
+                if (game && game?.completed) {
+                  let homeScore = parseInt(game.scores[0].score);
+                  let awayScore = parseInt(game.scores[1].score);
+
+                  if (game.scores[0].name === bet.team) {
+                    homeScore += bet.spread;
+                  } else if (game.scores[1].name === bet.team) {
+                    awayScore += bet.spread;
+                  }
+
+                  const totalGameScore =
+                    parseInt(game.scores[0].score) +
+                    parseInt(game.scores[1].score);
+
+                  let isTie = false;
+                  let winner = "";
+
+                  if (bet.type === "Spread") {
+                    if (homeScore > awayScore) {
+                      winner = game.home_team;
+                    } else if (homeScore < awayScore) {
+                      winner = game.away_team;
+                    } else {
+                      isTie = "It's a tie!";
+                    }
+
+                    if (winner === bet.team) {
+                      totalPoints += 1;
+                    }
+                    if (isTie) {
+                      totalPoints += 0;
+                    }
+                  }
+
+                  if (bet.type === "totals") {
+                    if (bet.totals === "Over" && totalGameScore > +bet.point) {
+                      winner = bet.team;
+                      totalPoints += 1;
+                    }
+
+                    if (bet.totals === "Under" && totalGameScore < +bet.point) {
+                      winner = bet.team;
+                      totalPoints += 1;
+                    }
+
+                    if (bet.total === totalGameScore) {
+                      // winner = bet.team;
+                      totalPoints += 0;
+                    }
+                  }
+
+                  _bets[i] = {
+                    ...bet,
+                    status: winner === bet.team ? "win" : "lost",
+                    gainedPoints: totalGameScore,
+                  };
+                }
               }
 
-              const totalGameScore =
-                parseInt(game.scores[0].score) + parseInt(game.scores[1].score);
-
-              let isTie = false;
-              let winner = "";
-
-              if (bet.type === "Spread") {
-                if (homeScore > awayScore) {
-                  winner = game.home_team;
-                } else if (homeScore < awayScore) {
-                  winner = game.away_team;
-                } else {
-                  isTie = "It's a tie!";
-                }
-
-                if (winner === bet.team) {
-                  totalPoints += 1;
-                }
-                if (isTie) {
-                  totalPoints += 0;
-                }
+              break; // Break out of the retry loop if the request is successful
+            } catch (error) {
+              if (error.response && error.response.status === 429) {
+                // Retry the request with exponential backoff
+                retryAttempts++;
+                backoffDelay *= 2;
+              } else {
+                throw error; // Throw the error if it's not a 429 error
               }
-
-              if (bet.type === "totals") {
-                if (bet.totals === "Over" && totalGameScore > +bet.point) {
-                  winner = bet.team;
-                  totalPoints += 1;
-                }
-
-                if (bet.totals === "Under" && totalGameScore < +bet.point) {
-                  winner = bet.team;
-                  totalPoints += 1;
-                }
-
-                if (bet.total === totalGameScore) {
-                  winner = bet.team;
-                  totalPoints += 0;
-                }
-              }
-
-              _bets[i] = {
-                ...bet,
-                status: winner === bet.team ? "win" : "lost",
-                gainedPoints: totalGameScore,
-              };
             }
           }
+
+          // const res = await axios.get(
+          //   `${API_SCORES_URL}/?apiKey=${ODDS_API_KEY}&eventIds=${gameId}&daysFrom=3`
+          // );
+
+          // const games = res.data;
+
+          // if (games) {
+          //   const game = games[0];
+
+          //   // games is completed!
+          //   if (game && game?.completed) {
+          //     let homeScore = parseInt(game.scores[0].score);
+          //     let awayScore = parseInt(game.scores[1].score);
+
+          //     if (game.scores[0].name === bet.team) {
+          //       homeScore += bet.spread;
+          //     } else if (game.scores[1].name === bet.team) {
+          //       awayScore += bet.spread;
+          //     }
+
+          //     const totalGameScore =
+          //       parseInt(game.scores[0].score) + parseInt(game.scores[1].score);
+
+          //     let isTie = false;
+          //     let winner = "";
+
+          //     if (bet.type === "Spread") {
+          //       if (homeScore > awayScore) {
+          //         winner = game.home_team;
+          //       } else if (homeScore < awayScore) {
+          //         winner = game.away_team;
+          //       } else {
+          //         isTie = "It's a tie!";
+          //       }
+
+          //       if (winner === bet.team) {
+          //         totalPoints += 1;
+          //       }
+          //       if (isTie) {
+          //         totalPoints += 0;
+          //       }
+          //     }
+
+          //     if (bet.type === "totals") {
+          //       if (bet.totals === "Over" && totalGameScore > +bet.point) {
+          //         winner = bet.team;
+          //         totalPoints += 1;
+          //       }
+
+          //       if (bet.totals === "Under" && totalGameScore < +bet.point) {
+          //         winner = bet.team;
+          //         totalPoints += 1;
+          //       }
+
+          //       if (bet.total === totalGameScore) {
+          //         winner = bet.team;
+          //         totalPoints += 0;
+          //       }
+          //     }
+
+          //     _bets[i] = {
+          //       ...bet,
+          //       status: winner === bet.team ? "win" : "lost",
+          //       gainedPoints: totalGameScore,
+          //     };
+          //   }
+          // }
         }
       })
     );
@@ -93,14 +184,15 @@ const betsToCheck = async (bets, userId, userCurrentPoints) => {
       bets: _bets,
     };
   } catch (error) {
-    console.log("BETS_CHECK_ERROR", error);
+    console.log("BETS_CHECK_ERROR", error.message);
     return {};
   }
 };
 
 // Function to be scheduled
 exports.checkBetsScheduled = functions.pubsub
-  .schedule("*/30 * * * 6,0")
+  // this is running function on Tue,Wed,Sat,Sun every 50 mins
+  .schedule("*/50 * * * 2,3,6,0")
   .timeZone("America/Chicago")
   .onRun(async (context) => {
     try {
@@ -147,29 +239,35 @@ exports.checkBetsScheduled = functions.pubsub
             (bet) => bet.status === "in-progress"
           );
 
-          if (isUncheckedBets) {
+          if (isUncheckedBets && currentUserData) {
             const { totalPoints, bets: updatedBets } = await betsToCheck(
-              currentWeekBets,
-              userId,
-              currentUserData.points ? currentUserData.points : 0
+              currentWeekBets
+              // userId,
+              // currentUserData.points ? currentUserData.points : 0
             );
 
-            // assign points
-            await admin
-              .firestore()
-              .collection("users")
-              .doc(userId)
-              .update({
-                points: admin.firestore.FieldValue.increment(totalPoints),
-              });
+            if (totalPoints !== undefined) {
+              // assign points
+              await admin
+                .firestore()
+                .collection("users")
+                .doc(userId)
+                .update({
+                  points: admin.firestore.FieldValue.increment(totalPoints),
+                });
+            }
 
-            await admin
-              .firestore()
-              .collection("bets")
-              .doc(userId)
-              .update({
-                [currentWeek]: [...updatedBets],
-              });
+            console.log("updatedBets -> " + currentUser.id, updatedBets);
+
+            if (updatedBets !== undefined) {
+              await admin
+                .firestore()
+                .collection("bets")
+                .doc(userId)
+                .update({
+                  [`week-${currentWeek}`]: [...updatedBets],
+                });
+            }
           }
         })
       );
