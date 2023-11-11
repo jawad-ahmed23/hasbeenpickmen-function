@@ -191,8 +191,7 @@ const betsToCheck = async (bets) => {
 
 // Function to be scheduled
 exports.checkBetsScheduled = functions.pubsub
-  // this is running function on Tue,Wed,Sat,Sun every 50 mins
-  .schedule("*/50 * * * 2,3,6,0")
+  .schedule("0 11 * * 0")
   .timeZone("America/Chicago")
   .onRun(async (context) => {
     try {
